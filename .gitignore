@@ -1,0 +1,13 @@
+# IDEs
+.idea/
+*.iml
+.vscode/
+
+# Maven
+target/
+
+# Compiled class files
+*.class
+
+# OS generated files
+.DS_Store
