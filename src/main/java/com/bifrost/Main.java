@@ -1,21 +1,21 @@
 package com.bifrost;
 
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.BufferedReader;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.io.OutputStream;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+
+
 public class Main {
   private static final ExecutorService EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
   private static final int PORT = 8080;
   private static final int MAX_PAYLOAD_SIZE = 1048576;
+  private static final int MAX_HEADER_LINE_LENGTH = 8192;
 
   public static void main(String[] args) {
     try (ServerSocket serverSocket = new ServerSocket(PORT)) {
@@ -31,19 +31,44 @@ public class Main {
 
   public static void handleClient(Socket clientSocket) {
     OutputStream out = null;
-    try {
+    try(clientSocket) {
       clientSocket.setSoTimeout(5000);
       out = clientSocket.getOutputStream();
-      BufferedReader reader =
-              new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-
+      //Buffered Reader is not good here because it stores and decodes it while reading (it won't handle emoji's
+        //      BufferedReader reader =
+//              new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+    InputStream in = new BufferedInputStream(clientSocket.getInputStream());
       String line;
       int contentLength = 0;
-      while ((line = reader.readLine()) != null && !line.isEmpty()) {
+      boolean firstLine = true;
+      while ((line = readLine(in)) != null && !line.isEmpty()) {
         System.out.println(line);
+        if(firstLine) {
+            String[] parts = line.split(" ");
+            if(parts.length < 2) {
+                sendHttpResponse(out, "400 Bad Request", "Invalid request line");
+                return;
+            }
+            if (!parts[0].equals("POST")) {
+              sendHttpResponse(out, "405 Method Not Allowed", "Use POST only");
+              return;
+            }
+          if (!parts[1].equalsIgnoreCase("/events")) {
+            sendHttpResponse(out, "404 Not Found", "NO such endpoint");
+            return;
+            }
+        }
+        firstLine=false;
         if (line.toLowerCase().startsWith("content-length:")) {
           String[] parts = line.split(":");
-          contentLength = Integer.parseInt(parts[1].trim());
+          if (parts.length >= 2) {
+            try {
+              contentLength = Integer.parseInt(parts[1].trim());
+            } catch (NumberFormatException e) {
+              sendHttpResponse(out, "400 Bad Request", "Invalid content length");
+              return;
+            }
+          }
         }
       }
 
@@ -53,21 +78,22 @@ public class Main {
       }
 
       if (contentLength > 0) {
-        char[] bodyBuffer = new char[contentLength];
-        int totalCharsRead = 0;
-        while (totalCharsRead < contentLength) {
-          int charRead = reader.read(bodyBuffer, totalCharsRead, contentLength - totalCharsRead);
-          if (charRead == -1) {
+          //READ the body as raw bytes and convert it after reading
+        byte[] bodyBuffer = new byte[contentLength];
+        int totalBytesRead = 0;
+        while (totalBytesRead < contentLength) {
+          int bytesRead = in.read(bodyBuffer, totalBytesRead, contentLength - totalBytesRead);
+          if (bytesRead == -1) {
             System.out.println("Client dropped connection prematurely.");
             return;
           }
-          totalCharsRead += charRead;
+          totalBytesRead += bytesRead;
         }
-        String requestBody = new String(bodyBuffer);
+        //convert to text
+        String requestBody = new String(bodyBuffer,StandardCharsets.UTF_8);
         System.out.println(requestBody);
         System.out.println("----------------------------\n");
       }
-
       sendHttpResponse(out, "200 OK", "Event tracked successfully");
     } catch (SocketTimeoutException e) {
       System.out.println("Socket timeout occurred: " + e.getMessage());
@@ -79,12 +105,25 @@ public class Main {
       System.out.println("Socket error occurred: " + e.getMessage());
     } catch (IOException e) {
       System.out.println("Error handling the client: " + e.getMessage());
-    } finally {
-      try {
-        clientSocket.close();
-      } catch (IOException ignored) {
-      }
     }
+  }
+
+  private static String readLine(InputStream in) throws IOException{
+      ByteArrayOutputStream lineBytes = new ByteArrayOutputStream();
+      int b;
+      int length=0;
+      while((b=in.read()) != -1){
+          if(b=='\n') break;
+          if(b!='\r') {
+              lineBytes.write(b);
+              length++;
+              if(length > MAX_HEADER_LINE_LENGTH){
+                  throw new IOException("Header line exceeds maximum limit of "+MAX_HEADER_LINE_LENGTH+" bytes");
+              }
+          }
+      }
+      if(b == -1 && lineBytes.size()==0) return null;
+      return lineBytes.toString(StandardCharsets.UTF_8);
   }
 
   private static void sendHttpResponse(OutputStream out, String status, String body)
