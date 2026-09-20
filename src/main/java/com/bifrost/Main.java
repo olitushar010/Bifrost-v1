@@ -8,6 +8,10 @@ import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import com.bifrost.dto.EventPayload;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Set;
 
 public class Main {
   private static final ExecutorService EXECUTOR = Executors.newVirtualThreadPerTaskExecutor();
@@ -15,6 +19,8 @@ public class Main {
   private static final int MAX_PAYLOAD_SIZE = 1048576;
   private static final int MAX_HEADER_LINE_LENGTH = 8192;
   private static final int MAX_TOTAL_HEADER_SIZE = 32 * 1024;
+  private static final Set<String> VALID_EVENT_TYPES = Set.of("USER_CLICK");
+  private static final ObjectMapper mapper = new ObjectMapper();
 
   public static void main(String[] args) {
     try (ServerSocket serverSocket = new ServerSocket(PORT)) {
@@ -31,6 +37,7 @@ public class Main {
   public static void handleClient(Socket clientSocket) {
     OutputStream out = null;
     try (clientSocket) {
+      try{
       clientSocket.setSoTimeout(5000);
       out = clientSocket.getOutputStream();
       // Buffered Reader is not good here because it stores and decodes it while reading (it won't
@@ -67,6 +74,7 @@ public class Main {
             return;
           }
           firstLine = false;
+          continue;
         }
         if (line.toLowerCase().startsWith("content-length:")) {
           String[] parts = line.split(":",2);
@@ -118,9 +126,27 @@ public class Main {
         String requestBody = new String(bodyBuffer, StandardCharsets.UTF_8);
         System.out.println(requestBody);
         System.out.println("----------------------------\n");
+        EventPayload payload = mapper.readValue(requestBody, EventPayload.class);
 
+        if(payload.getEventId() == null || payload.getEventId().isEmpty()){
+          sendHttpResponse(out, "400 Bad Request", "Missing eventId");
+          return;
+        }
+        if(payload.getEventType() == null || payload.getEventType().isEmpty()){
+          sendHttpResponse(out, "400 Bad Request", "Missing eventType");
+          return;
+        }
+        if(!VALID_EVENT_TYPES.contains(payload.getEventType())){
+          sendHttpResponse(out, "400 Bad Request", "Invalid eventType");
+          return;
+        }
+
+        System.out.println("Event ID: " + payload.getEventId());
+        System.out.println("Event Type: " + payload.getEventType());
+        System.out.println("Payload: " + payload.getPayload());
       sendHttpResponse(out, "200 OK", "Event tracked successfully");
-    } catch (SocketTimeoutException e) {
+    }
+   catch (SocketTimeoutException e) {
       System.out.println("Socket timeout occurred: " + e.getMessage());
       try {
         if (out != null) sendHttpResponse(out, "408 Request Time Out", "Request Timed Out");
@@ -133,10 +159,18 @@ public class Main {
       try{
         if(out != null) sendHttpResponse(out, "431 Request Header Fields Too Large", e.getMessage());
       }catch(IOException ignored){}
+    }catch(JsonProcessingException e){
+      System.out.println("Error parsing JSON: "+ e.getMessage());
+      try{
+        if(out!=null) sendHttpResponse(out, "400 Bad Request", "Invalid JSON format");
+      }catch(IOException ignored){}      
     } catch (IOException e) {
       System.out.println("Error handling the client: " + e.getMessage());
     }
-  }
+  } catch (IOException e) {
+      System.out.println("Error closing client socket: " + e.getMessage());
+    }
+}
 
   private static String readLine(InputStream in) throws IOException {
     ByteArrayOutputStream lineBytes = new ByteArrayOutputStream();
