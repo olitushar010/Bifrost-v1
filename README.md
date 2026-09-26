@@ -76,7 +76,7 @@ PostgreSQL              [not started]
 **Hardening applied to 1.1/1.2 (architect review):** byte-accurate body/response length, charset-tolerant `Content-Type`, `411` on missing/invalid `Content-Length` (prevents crash), `split(":", 2)`, explicit `Connection: close`, cumulative + per-line header size caps (`431` via custom exception).
 
 ### Phase 2: The Vault — not started
-- [ ] 2.1 PostgreSQL schema
+- [x] 2.1 PostgreSQL schema
 - [ ] 2.2 Raw JDBC (`PreparedStatement`) — **pin `pgjdbc >= 42.6.0`** before starting, to avoid virtual thread pinning
 - [ ] 2.3 Bounded connection pool — use `Semaphore`, not `synchronized` (same pinning risk)
 
