@@ -75,9 +75,9 @@ PostgreSQL              [not started]
 
 **Hardening applied to 1.1/1.2 (architect review):** byte-accurate body/response length, charset-tolerant `Content-Type`, `411` on missing/invalid `Content-Length` (prevents crash), `split(":", 2)`, explicit `Connection: close`, cumulative + per-line header size caps (`431` via custom exception).
 
-### Phase 2: The Vault — In Progress
+### Phase 2: The Vault — complete
 - [x] 2.1 PostgreSQL schema — `bifrost` database + `events` table created, matches README schema, unique constraint on `event_id` verified manually (duplicate insert correctly rejected)
-- [ ] 2.2 Raw JDBC (`PreparedStatement`) — `pgjdbc 42.6.0` pinned and connection verified via `DbConfig`/`DatabaseConnection`; actual event `INSERT` not yet written (pending)
+- [x] 2.2 Raw JDBC (`PreparedStatement`) — `pgjdbc 42.6.0` pinned; `EventRepository.insertEvent()` inserts via `PreparedStatement`, `eventId` typed as `UUID` (via `setObject`), payload stored as `JSONB` via `PGobject`; duplicate `event_id` correctly returns `409 Conflict` (SQLState `23505`), other SQL/serialization failures return `500`; verified end-to-end with real inserts, duplicate rejection, and malformed-input handling
 - [x] 2.3 Connection pooling — **using HikariCP**, not a custom `Semaphore`-based pool as originally planned (deliberate decision, see below); tested pool exhaustion/timeout and connection reuse, pool size set to 10
 
 ### Phase 3: The Engine — not started
