@@ -67,7 +67,7 @@ PostgreSQL              [not started]
 
 ## Roadmap
 
-### Phase 1: The Gateway — in progress
+### Phase 1: The Gateway — Completed
 - [x] 1.1 Network listener
 - [x] 1.2 Protocol parser — routing, header/body handling, security hardening (see below)
 - [x] 1.3 Deserialization — Jackson -> `EventPayload`
@@ -75,7 +75,7 @@ PostgreSQL              [not started]
 
 **Hardening applied to 1.1/1.2 (architect review):** byte-accurate body/response length, charset-tolerant `Content-Type`, `411` on missing/invalid `Content-Length` (prevents crash), `split(":", 2)`, explicit `Connection: close`, cumulative + per-line header size caps (`431` via custom exception).
 
-### Phase 2: The Vault — not started
+### Phase 2: The Vault — In Progress
 - [x] 2.1 PostgreSQL schema — `bifrost` database + `events` table created, matches README schema, unique constraint on `event_id` verified manually (duplicate insert correctly rejected)
 - [ ] 2.2 Raw JDBC (`PreparedStatement`) — `pgjdbc 42.6.0` pinned and connection verified via `DbConfig`/`DatabaseConnection`; actual event `INSERT` not yet written (pending)
 - [x] 2.3 Connection pooling — **using HikariCP**, not a custom `Semaphore`-based pool as originally planned (deliberate decision, see below); tested pool exhaustion/timeout and connection reuse, pool size set to 10
@@ -93,6 +93,9 @@ PostgreSQL              [not started]
 - `200` vs `202`: revisit once Phase 2.3 introduces a real queue.
 - `pgjdbc` version must be confirmed against actual JDK 21 setup before Phase 2.2.
 - CDC (Phase 4) considered and deliberately kept — schema is already designed for it at no extra cost.
+- **Connection pooling: HikariCP chosen over a custom `Semaphore`-based pool.** Original plan was to hand-build one for the concurrency-primitives learning value; decided against it since HikariCP is the same tool Spring Boot (v1.1) defaults to, so the time is better spent there — and the equivalent bounded-concurrency practice is still covered later via the Rate Limiter LLD exercise.
+- `DbConfig` now fails fast with a clear message on missing/invalid env vars, instead of a bare `NumberFormatException`/`NullPointerException`.
+- `ConnectionPool`'s explicit `shutdown()`/`close()` call is deliberately deferred to Phase 3.3 (JVM shutdown hook), not added ad hoc.
 
 ## Tech stack
 Java 21, Maven, Jackson, PostgreSQL (planned)
