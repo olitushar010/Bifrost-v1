@@ -1,16 +1,17 @@
 package com.bifrost.dto;
 
 import java.util.Map;
+import java.util.UUID;
 
 public class EventPayload {
-    private String eventId;
+    private UUID eventId;
     private String eventType;
     private Map<String, Object> payload;
     
-    public String getEventId(){
+    public  UUID getEventId(){
         return eventId;
     }
-    public void setEventId(String eventId){
+    public void setEventId(UUID eventId){
         this.eventId = eventId;
     }
     public String getEventType(){

@@ -6,9 +6,11 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.sql.SQLException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import com.bifrost.dto.EventPayload;
+import com.bifrost.repository.EventRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Set;
@@ -128,7 +130,7 @@ public class Main {
         System.out.println("----------------------------\n");
         EventPayload payload = mapper.readValue(requestBody, EventPayload.class);
 
-        if(payload.getEventId() == null || payload.getEventId().isEmpty()){
+        if(payload.getEventId() == null){
           sendHttpResponse(out, "400 Bad Request", "Missing eventId");
           return;
         }
@@ -141,10 +143,22 @@ public class Main {
           return;
         }
 
-        System.out.println("Event ID: " + payload.getEventId());
-        System.out.println("Event Type: " + payload.getEventType());
-        System.out.println("Payload: " + payload.getPayload());
-      sendHttpResponse(out, "200 OK", "Event tracked successfully");
+        System.out.println("Inserting the request with Event ID: " + payload.getEventId() + " Event Type: "+payload.getEventType()+" Event Payload: "+payload.getPayload());
+        EventRepository eventRepository = new EventRepository();
+        try{
+        eventRepository.insertEvent(payload);
+        }catch (JsonProcessingException e){
+          sendHttpResponse(out,"500 Internal Server Error","Error while processing JSON");
+          return;
+        } catch (SQLException e) {
+          if ("23505".equals(e.getSQLState())) {
+            sendHttpResponse(out, "409 Conflict", "Unique key violation for EventId");
+            return;
+          }
+          sendHttpResponse(out,"500 Internal Server Error","SQL can't be executed"+ e.getMessage()+" code: "+e.getSQLState());
+          return;
+        }
+        sendHttpResponse(out, "200 OK", "Event tracked successfully");
     }
    catch (SocketTimeoutException e) {
       System.out.println("Socket timeout occurred: " + e.getMessage());
@@ -167,7 +181,7 @@ public class Main {
     } catch (IOException e) {
       System.out.println("Error handling the client: " + e.getMessage());
     }
-  } catch (IOException e) {
+    } catch (IOException e) {
       System.out.println("Error closing client socket: " + e.getMessage());
     }
 }
