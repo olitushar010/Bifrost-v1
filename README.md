@@ -76,9 +76,9 @@ PostgreSQL              [not started]
 **Hardening applied to 1.1/1.2 (architect review):** byte-accurate body/response length, charset-tolerant `Content-Type`, `411` on missing/invalid `Content-Length` (prevents crash), `split(":", 2)`, explicit `Connection: close`, cumulative + per-line header size caps (`431` via custom exception).
 
 ### Phase 2: The Vault — not started
-- [x] 2.1 PostgreSQL schema
-- [ ] 2.2 Raw JDBC (`PreparedStatement`) — **pin `pgjdbc >= 42.6.0`** before starting, to avoid virtual thread pinning
-- [ ] 2.3 Bounded connection pool — use `Semaphore`, not `synchronized` (same pinning risk)
+- [x] 2.1 PostgreSQL schema — `bifrost` database + `events` table created, matches README schema, unique constraint on `event_id` verified manually (duplicate insert correctly rejected)
+- [ ] 2.2 Raw JDBC (`PreparedStatement`) — `pgjdbc 42.6.0` pinned and connection verified via `DbConfig`/`DatabaseConnection`; actual event `INSERT` not yet written (pending)
+- [x] 2.3 Connection pooling — **using HikariCP**, not a custom `Semaphore`-based pool as originally planned (deliberate decision, see below); tested pool exhaustion/timeout and connection reuse, pool size set to 10
 
 ### Phase 3: The Engine — not started
 - [ ] 3.1 Externalized configuration
